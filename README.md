@@ -1,104 +1,200 @@
-# 🧠 Medical Misinformation Detection using LLaMA 2 and QLoRA
+# 🔬 Medical Misinformation Detection — LLaMA 2 7B Fine-Tuning
 
-This project is a **capstone research project** focused on detecting medical misinformation using fine-tuned Large Language Models (LLMs). I served as the **Data Scientist and Machine Learning Engineer** on this project, responsible for model benchmarking, fine-tuning with QLoRA, and building an interactive Gradio-based UI.
-
----
-
-## 📊 Dataset
-
-We used the **HealthFact dataset**, which contains labeled medical claims categorized as:
-
-- `TRUE`
-- `FALSE`
-- `MISLEADING` (converted from original "unproven" and "mixture" labels)
-
-**Dataset Split:**
-
-| Split        | # Samples |
-|--------------|-----------|
-| Training     | 9804      |
-| Validation   | 1114      |
-| Test         | 1233      |
+> **Improving medical claim classification accuracy from 45% → 77% through QLoRA fine-tuning of LLaMA 2 7B on the HealthFact dataset**
 
 ---
 
-## 🔧 Project Pipeline
+## 📊 Results at a Glance
 
-### ✅ 1. Data Preprocessing
-
-- Removed unnecessary columns from TSV files
-- Mapped `unproven` and `mixture` labels to `MISLEADING`
-- Saved clean versions in JSON for downstream use
-
-### ✅ 2. Model Benchmarking (Zero-Shot)
-
-- Used a 4-bit quantized LLaMA-2 7B model with no fine-tuning
-- Benchmark accuracy: **~34–42%**
-
-### ✅ 3. Fine-Tuning with QLoRA
-
-- Fine-tuned using the **QLoRA (Quantized Low-Rank Adaptation)** method
-- LoRA Parameters:
-  - `r=16` → `32`
-  - `lora_alpha=32` → `64`
-  - Learning rate: `2e-4` → `3e-4`
-  - Target modules expanded to: `["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]`
-
-**Improved Accuracy:**  
-Final test accuracy: **~77%**
+| Method | Accuracy | Notes |
+|---|---|---|
+| Base LLaMA 2 7B (no prompt) | ~45% | Untuned baseline on 100-sample holdout |
+| One-shot prompting | ~50% | Minimal improvement from single example |
+| Few-shot prompting | ~58% | Better, but inconsistent label parsing |
+| **QLoRA fine-tuned (final)** | **77%** | **32pp improvement over baseline** |
 
 ---
 
-## 🖥️ Gradio UI
+## 🧠 Project Overview
 
-A lightweight chatbot UI was built using **Gradio** where users can enter any medical claim and the model classifies it as:
+This project was completed as part of the **DataBytes x Deakin University AI Capstone** (March – October 2025). I led a team of 5 using Agile methodology across an 8-month lifecycle.
 
-- ✅ TRUE
-- ❌ FALSE
-- ⚠️ MISLEADING
-
-This makes the solution usable by healthcare professionals, researchers, or the public.
+The goal was to fine-tune an open-source large language model to classify medical health claims as **true**, **false**, or **misleading** — addressing the growing problem of medical misinformation online.
 
 ---
 
-## 🛠️ Tools & Libraries
+## 🗂️ Dataset
 
-- [LLaMA 2 (7B Chat)](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf)
-- 🤗 Transformers, Datasets, Accelerate
-- 🧠 PEFT + QLoRA
-- 🧱 BitsAndBytes for 4-bit quantization
-- 📈 Scikit-learn for evaluation
-- 🌐 Gradio for web UI
-- 🧠 Google Colab Pro+ (A100 GPU)
+**HealthFact** — a benchmark dataset of medical claims with fact-check labels.
 
----
-## 📥 Download Datasets and Fine-Tuned Models
+| Split | Size |
+|---|---|
+| Training | ~10,000 records |
+| Validation (filtered) | ~1,500 records |
+| Benchmark holdout | 100 samples (held out from training) |
 
-Due to GitHub's file size limitations, the full datasets and fine-tuned QLoRA adapters are hosted externally.
-
-You can download everything from the following Google Drive link:
-
-🔗 **[Download Here](https://drive.google.com/drive/folders/1wsAWBgsPEPYm68uiXL0rtxNqGQCiuAVy?usp=drive_link)**
-
-The folder contains:
-- ✅ Cleaned and formatted HealthFact datasets (train/dev/test)
-- ✅ Benchmarking results before and after fine-tuning
-- ✅ Fine-tuned QLoRA adapters (Version 1 and Version 2)
-
-
-## 🚀 Future Work
-
-- Integrate **RAG (Retrieval-Augmented Generation)** for real-time evidence checking
-- Add a **Trust Score** for classification confidence
-- Deploy as a web API or mobile application
+Each record contains:
+- `claim` — the medical health statement
+- `explanation` — context or source information
+- `label` — `true`, `false`, or `MISLEADING`
 
 ---
 
-## 👤 Author
+## 🏗️ Architecture & Pipeline
 
-**Hashaam Khan**  
-Master of Data Science – Deakin University  
-Role: Project Lead 
-Individual Role: Data Scientist & ML Engineer  
+```
+HealthFact Dataset
+       │
+       ▼
+  Data Cleaning & Formatting
+  (prompt template: Claim + Explanation → Answer)
+       │
+       ▼
+  Benchmark Holdout (100 samples separated)
+       │
+       ▼
+  ┌────────────────────────────────────┐
+  │         LLaMA 2 7B Chat            │
+  │   (meta-llama/Llama-2-7b-chat-hf) │
+  └────────────────────────────────────┘
+       │
+  Baseline benchmark: 45% accuracy
+  (confusion matrix evaluation)
+       │
+       ▼
+  Prompting experiments
+  (one-shot → few-shot)
+       │
+       ▼
+  ┌────────────────────────────────────┐
+  │     QLoRA Fine-Tuning              │
+  │   4-bit quantization (NF4)         │
+  │   via BitsAndBytes + PEFT          │
+  └────────────────────────────────────┘
+       │
+  Post-tuning benchmark: 77% accuracy
+       │
+       ▼
+  Confusion Matrix Evaluation
+  (sklearn, 3-class: true / false / MISLEADING)
+```
+
+---
+
+## ⚙️ Fine-Tuning Configuration
+
+```python
+# Quantization — 4-bit NF4 via BitsAndBytes
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4"
+)
+
+# Training arguments
+training_args = TrainingArguments(
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=8,
+    learning_rate=2e-4,
+    num_train_epochs=3,
+    fp16=True,
+    evaluation_strategy="epoch",
+    save_strategy="epoch"
+)
+```
+
+---
+
+## 📈 Evaluation
+
+Evaluation was performed on a 100-sample holdout benchmark, separated before training to prevent data leakage.
+
+**Metrics used:**
+- Overall accuracy
+- Confusion matrix (3-class: `true`, `false`, `MISLEADING`)
+- Per-class precision and recall
+
+```python
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+cm = confusion_matrix(y_true, y_pred, labels=["true", "false", "MISLEADING"])
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["true", "false", "MISLEADING"])
+disp.plot(cmap="Blues", values_format="d")
+```
+
+---
+
+## 🛠️ Tech Stack
+
+| Category | Tools |
+|---|---|
+| Base model | LLaMA 2 7B Chat (meta-llama/Llama-2-7b-chat-hf) |
+| Fine-tuning | PEFT, QLoRA, BitsAndBytes (4-bit NF4) |
+| Training framework | Hugging Face Transformers, Trainer API |
+| Data processing | Pandas, Hugging Face Datasets |
+| Evaluation | Scikit-learn (confusion matrix, accuracy) |
+| Compute | Google Colab (GPU), Google Drive |
+| Version control | Git, GitHub |
+| Project management | Agile / Scrum (weekly standups, sprint planning) |
+
+---
+
+## 🗃️ Repository Structure
+
+```
+medical-misinformation-detection/
+├── notebooks/
+│   └── Llama2_Finetuning.ipynb       # Full pipeline: load → benchmark → fine-tune → evaluate
+├── data/
+│   └── README.md                      # HealthFact dataset instructions (not included — see below)
+├── results/
+│   └── confusion_matrix.png           # Post-tuning confusion matrix
+└── README.md
+```
+
+> **Note on data:** The HealthFact dataset is publicly available. Download and place JSON files in `/data/` before running the notebook.
+
+---
+
+## 🚀 How to Run
+
+**1. Clone the repo**
+```bash
+git clone https://github.com/hashaamkhan/medical-misinformation-detection.git
+cd medical-misinformation-detection
+```
+
+**2. Install dependencies**
+```bash
+pip install transformers datasets accelerate peft trl bitsandbytes scikit-learn pandas
+```
+
+**3. Add Hugging Face token**
+```python
+from huggingface_hub import login
+login()  # You need access to meta-llama/Llama-2-7b-chat-hf
+```
+
+**4. Run the notebook**
+
+Open `notebooks/Llama2_Finetuning.ipynb` in Google Colab (GPU runtime recommended — T4 or A100).
+
+---
+
+## 👥 Team
+
+Led by **Hashaam Khan** (project lead) — team of 5, DataBytes x Deakin University AI Capstone.
+
+Methodology: Agile Scrum — weekly standups, sprint retrospectives, fortnightly stakeholder presentations.
+
+---
+
+## 📬 Contact
+
+**Hashaam Khan**
+- 📧 hashaamkhan542@gmail.com
 
 
+> *Master of Data Science (Distinction) · Deakin University · Melbourne, AU*
+> *Open to data science and AI/ML roles · 485 Graduate Visa · Full work rights*
